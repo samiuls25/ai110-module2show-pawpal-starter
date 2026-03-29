@@ -14,13 +14,13 @@
 
 The system has five classes. Each has a focused responsibility with no overlap:
 
-| Class | Attributes | Methods |
-|---|---|---|
-| `Owner` | `name`, `available_minutes`, `pet` | `add_pet(pet)` |
-| `Pet` | `name`, `species`, `age` | _(data only)_ |
-| `Task` | `title`, `duration_minutes`, `priority`, `category` | `is_high_priority()` |
-| `Scheduler` | `owner`, `tasks` | `generate_plan()` |
-| `DailyPlan` | `scheduled_tasks`, `skipped_tasks`, `total_duration` | `explain()` |
+| Class | Attributes | Methods | Responsibility |
+|---|---|---|---|
+| `Pet` | `name`, `species`, `age` | _(none)_ | Pure data object — describes the pet whose care is being planned |
+| `Task` | `title`, `duration_minutes`, `priority`, `category` | `is_high_priority()` | Represents one care activity; knows enough about itself to answer priority questions |
+| `Owner` | `name`, `available_minutes`, `pet` | `add_pet(pet)` | Holds the owner's profile and their single time constraint (available minutes per day) |
+| `Scheduler` | `owner`, `tasks` | `generate_plan()` | The only class with scheduling logic — reads the owner's budget and task list, decides what fits |
+| `DailyPlan` | `owner`, `scheduled_tasks`, `skipped_tasks`, `total_duration`, `skip_reasons` | `explain()` | Captures the Scheduler's output and can narrate the reasoning behind every inclusion and exclusion |
 
 **Relationships:**
 - `Owner` has exactly one `Pet` (one-to-one; the app targets a single pet at a time)
@@ -73,8 +73,11 @@ classDiagram
 
 **b. Design changes**
 
-- Did your design change during implementation?
-- If yes, describe at least one change and why you made it.
+After reviewing the class skeleton, three problems surfaced that required changes before any logic was written:
+
+1. **Added `owner` to `DailyPlan`** — The original `DailyPlan` held only tasks and a duration total. When implementing `explain()`, it would have no way to reference the pet's name, the owner's name, or the original time budget. Adding `owner: Owner` gives `explain()` the context it needs to produce a meaningful narrative (e.g., "Jordan had 90 minutes available; Mochi's morning walk and feeding were scheduled, totalling 45 minutes.").
+
+2. **Made `pet` an optional constructor argument on `Owner`** — The original design set `pet = None` in `__init__` and relied entirely on `add_pet()` to assign it. This meant a `Scheduler` could be built around an `Owner` with no pet, a silent error. Accepting `pet` as an optional keyword argument in `__init__` allows the pet to be set at construction time when available, while keeping `add_pet()` for the two-step UI flow where owner and pet info are entered separately.
 
 ---
 
