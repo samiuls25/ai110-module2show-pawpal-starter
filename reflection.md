@@ -2,10 +2,74 @@
 
 ## 1. System Design
 
-**a. Initial design**
+**a. Core user actions**
 
-- Briefly describe your initial UML design.
-- What classes did you include, and what responsibilities did you assign to each?
+1. **Set up owner and pet profile** — The user enters basic information about themselves (e.g., time available in the day) and their pet (e.g., name, species, age). This context shapes what tasks are relevant and how the schedule is constrained. For example, a user with only 2 hours free should not receive a plan that demands 4 hours of activity.
+
+2. **Add and manage care tasks** — The user can create, edit, or remove individual pet care tasks such as walks, feedings, medication, grooming, or enrichment activities. Each task carries at minimum a duration (how long it takes) and a priority (how critical it is to complete today). This gives the scheduler the raw material it needs to build a plan.
+
+3. **Generate and review a daily schedule** — The user requests a daily plan and receives an ordered list of tasks that fit within their time constraints, ranked by priority. The app explains why it chose to include or exclude specific tasks, so the user understands the tradeoffs and can adjust their inputs if needed.
+
+**b. Initial design**
+
+The system has five classes. Each has a focused responsibility with no overlap:
+
+| Class | Attributes | Methods |
+|---|---|---|
+| `Owner` | `name`, `available_minutes`, `pet` | `add_pet(pet)` |
+| `Pet` | `name`, `species`, `age` | _(data only)_ |
+| `Task` | `title`, `duration_minutes`, `priority`, `category` | `is_high_priority()` |
+| `Scheduler` | `owner`, `tasks` | `generate_plan()` |
+| `DailyPlan` | `scheduled_tasks`, `skipped_tasks`, `total_duration` | `explain()` |
+
+**Relationships:**
+- `Owner` has exactly one `Pet` (one-to-one; the app targets a single pet at a time)
+- `Scheduler` uses `Owner` (to read the time budget) and a list of `Task` objects
+- `Scheduler` produces a `DailyPlan`
+- `DailyPlan` contains `Task` objects split into scheduled vs. skipped
+
+```mermaid
+classDiagram
+    class Owner {
+        +String name
+        +int available_minutes
+        +Pet pet
+        +add_pet(pet)
+    }
+
+    class Pet {
+        +String name
+        +String species
+        +int age
+    }
+
+    class Task {
+        +String title
+        +int duration_minutes
+        +String priority
+        +String category
+        +is_high_priority() bool
+    }
+
+    class Scheduler {
+        +Owner owner
+        +List~Task~ tasks
+        +generate_plan() DailyPlan
+    }
+
+    class DailyPlan {
+        +List~Task~ scheduled_tasks
+        +List~Task~ skipped_tasks
+        +int total_duration
+        +explain() str
+    }
+
+    Owner "1" --> "1" Pet : has
+    Scheduler --> Owner : uses
+    Scheduler --> Task : considers
+    Scheduler ..> DailyPlan : produces
+    DailyPlan --> Task : contains
+```
 
 **b. Design changes**
 
