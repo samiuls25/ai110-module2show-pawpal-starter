@@ -73,7 +73,7 @@ classDiagram
 
 **b. Design changes**
 
-After reviewing the class skeleton, three problems surfaced that required changes before any logic was written:
+After reviewing the class skeleton, two problems surfaced that required changes before any logic was written:
 
 1. **Added `owner` to `DailyPlan`** — The original `DailyPlan` held only tasks and a duration total. When implementing `explain()`, it would have no way to reference the pet's name, the owner's name, or the original time budget. Adding `owner: Owner` gives `explain()` the context it needs to produce a meaningful narrative (e.g., "Jordan had 90 minutes available; Mochi's morning walk and feeding were scheduled, totalling 45 minutes.").
 
@@ -85,8 +85,15 @@ After reviewing the class skeleton, three problems surfaced that required change
 
 **a. Constraints and priorities**
 
-- What constraints does your scheduler consider (for example: time, priority, preferences)?
-- How did you decide which constraints mattered most?
+The scheduler considers three layered constraints:
+
+1. **Time budget** (`Owner.available_minutes`) — No task is scheduled if it would exceed the remaining minutes, regardless of priority. This is the most important constraint because it reflects reality: a 30-minute walk can't happen in a 10-minute window.
+
+2. **Priority** (`Task.priority`: `"high"`, `"medium"`, `"low"`) — the first tiebreaker inside the time budget. Higher-priority tasks are always attempted before lower-priority ones within the same pass. A missed high-priority medication matters more than a missed enrichment activity.
+
+3. **Frequency** (`Task.frequency`: `"daily"`, `"weekly"`, `"as-needed"`) — the second tiebreaker and the basis for two-pass scheduling. Daily tasks get a dedicated first pass before weekly or as-needed tasks compete for the remaining budget.
+
+The decision to rank time > priority > frequency came from a simple thought: if I could only schedule one thing today, what would it be? The answer was always a high-priority daily task (medication), never a low-priority weekly task (grooming), regardless of their duration. That thought directly maps to the sort key in `generate_plan()`.
 
 **b. Tradeoffs**
 
@@ -105,9 +112,7 @@ objects, computing each task's end time (`start + duration`), and then comparing
 every pair of tasks to check for intersection. For a small daily task list (5–15
 tasks), the added complexity is rarely worth the benefit: most pet care tasks
 (feeding, medication, a walk) are discrete activities that don't actually run in
-parallel. The exact-match check catches the most common real-world mistake —
-accidentally assigning two tasks to the same fixed slot — without adding code
-that would be harder to maintain and explain.
+parallel. 
 
 *When this tradeoff would stop being reasonable:*
 
@@ -123,13 +128,27 @@ next step.
 
 **a. How you used AI**
 
-- How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
-- What kinds of prompts or questions were most helpful?
+AI was used for three phases of the project, each with a different kind of prompt:
+
+**Design brainstorming** — Early on, I asked Claude: "Given these three user actions (set up profile, manage tasks, generate a plan), what is the minimum set of classes needed to keep responsibilities clean?" The back-and-forth helped me spot that my original design combined `Scheduler` (decision logic) and `DailyPlan` (output representation) into one class. Splitting them made both easier to test.
+
+**Logic implementation** — For `detect_conflicts()`, I described the bucketing strategy in plain English and asked Claude to translate it into Python using `defaultdict`. This was faster than writing it from scratch, and because I had already designed the algorithm, I could immediately check whether the generated code matched my desired intention.
+
+**Test generation** — After the system was working, I described the three behaviors to verify (sorting, recurrence, conflict detection) and asked for pytest functions with edge cases. The AI generated a solid baseline code; I then reviewed each test against the actual method signatures to confirm the assertions were testing the right thing.
+
+The most effective prompts were **narrow and role-specific**: "Write only the sort key lambda for this method" produced cleaner output than "Write the whole scheduler class." Broad prompts tended to generate plausible-but-wrong structure; narrow prompts generated usable code that I could assess line by line.
+
+**Which Claude/Copilot features were most effective:**
+
+- **Automatically using codebase for context** — Having the codebase accessible while asking Claude to implement a specific method meant suggestions were already shaped to the existing class interface. The AI didn't need to guess field names or method signatures.
+- **Explaining existing code** — Asking "What does this sort key actually do step by step?" before accepting it was more reliable than trusting that generated code was correct just because it looked reasonable.
+- **Test scaffolding** — Generating the `make_task()` helper and the `make_scheduler()` saved the most time. Boilerplate test setup is tedious to write manually, but easy for AI to get right.
 
 **b. Judgment and verification**
 
-- Describe one moment where you did not accept an AI suggestion as-is.
-- How did you evaluate or verify what the AI suggested?
+During test generation, Claude initially suggested a test for `detect_conflicts` that created two tasks with the same title and then asserted the conflict message contained that title. The test would have passed — but it was testing the wrong thing. The conflict arises from two tasks sharing the same time slot, not from having the same name. A pet could have "Walk" scheduled for both Monday and Tuesday without conflict; the test as written would have flagged that incorrectly.
+
+I rejected the title-based assertion and rewrote the test to make sure that the conflict message contained the time string that is the actual key the system uses for detection. I verified this by reading `detect_conflicts()` line by line and confirming that `time_slot` not title drives the warning string.
 
 ---
 
@@ -137,13 +156,27 @@ next step.
 
 **a. What you tested**
 
-- What behaviors did you test?
-- Why were these tests important?
+21 tests across four groups:
+
+| Group | What it verifies | Why it matters |
+|---|---|---|
+| **Sorting** | `sort_by_time` returns tasks in ascending `HH:MM` order; timeless tasks land last; empty input is safe | If sorting is wrong, the displayed schedule is misleading even when the logic behind it is correct |
+| **Recurrence** | Daily tasks get a `+1 day` successor; weekly tasks get `+7 days`; `as-needed` tasks return `None`; new task appears in `get_pending_tasks()` | Recurrence is the system's only stateful mutation — a silent bug here would cause tasks to disappear permanently |
+| **Conflict detection** | Same date + same time → conflict flagged; different time or different date → no flag; no `start_time` → skipped | Users rely on this to catch scheduling mistakes; false positives are as harmful as false negatives |
+| **Edge cases** | Empty pet, empty owner, duplicate `add_task` raises, `is_high_priority()` flag, unknown title returns `None` | Boundary conditions are where silent data corruption is most likely |
 
 **b. Confidence**
 
-- How confident are you that your scheduler works correctly?
-- What edge cases would you test next if you had more time?
+**★★★★☆ (4 / 5)**
+
+The behaviors tested are the ones most likely to affect real users day-to-day, and all 21 tests pass cleanly. Confidence is high for the core loop: add tasks → complete a task → verify recurrence → check for conflicts.
+
+The missing star reflects behaviors not yet covered:
+
+- `generate_plan()` greedy scheduling: does it always schedule the highest-priority daily tasks first when the budget is tight?
+- Duration-overlap conflicts (two tasks whose windows intersect without sharing an exact start time)
+- `filter_tasks()` with `pet_name` + `completed` combined
+- `Owner.remove_pet()` and `Pet.remove_task()` mutation correctness
 
 ---
 
@@ -151,12 +184,20 @@ next step.
 
 **a. What went well**
 
-- What part of this project are you most satisfied with?
+The class boundary between `Scheduler` and `DailyPlan` is the part I'm most satisfied with. It would have been easy to put `explain()` into `Scheduler`, but keeping the output object separate means the plan can be inspected, stored, or displayed independently of the logic that created it. That decision made testing simpler too. I could construct a `DailyPlan` directly in a test without running the full scheduling algorithm.
 
 **b. What you would improve**
 
-- If you had another iteration, what would you improve or redesign?
+Two things:
+
+1. **Duration-overlap conflict detection** — The current exact-match approach is a potential issue. I would add end-time computation (`start + timedelta(minutes=duration_minutes)`) and check for interval intersection. This would require storing `start_time` as a `time` object rather than a raw string, which is a small but worthwhile edit.
+
+2. **`Owner` owning a list of pets, not just one** — The original design targeted a single pet. The implementation already moved to `owner.pets: list[Pet]`, but the Streamlit UI and some documentation still frame it as single-pet. A full redesign would have multi-pet support cleanly through the UI and make conflict detection pet-aware (flagging which pets are affected, not just which tasks).
 
 **c. Key takeaway**
 
-- What is one important thing you learned about designing systems or working with AI on this project?
+The most important lesson was that AI makes you a faster architect, not a better one by default. Claude could generate a plausible `detect_conflicts()` in seconds, but "plausible" is not the same as "correct for this specific design." The moment I stopped reading generated code carefully because it ran without errors, was exactly when bugs slipped through (like the title-based conflict test that asserted the wrong thing).
+
+Using separate sessions for different phases (design → implementation → testing) helped in keeping differing logic separate - a single long conversation would have blurred the logic eventually. Each session started with a description of what I needed and why, which forced me to say my intent again rather than carry along assumptions from the previous phase. That repeated clarification prevented clashing ideas early on.
+
+Even if a test runs, AI can get the logic run which is hard to fully catch if its something that only periodicially acts up. It's still up to humans to ensure everything is working correctly and maintain comprehension of the code. 
