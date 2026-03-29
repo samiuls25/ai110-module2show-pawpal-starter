@@ -51,6 +51,33 @@ overlap); see `reflection.md §2b` for the reasoning behind that tradeoff.
 
 ---
 
+## Testing PawPal+
+
+### Running the tests
+
+```bash
+python -m pytest
+```
+
+### What the tests cover
+
+| Area | Tests | Description |
+|---|---|---|
+| **Sorting Correctness** | 4 tests | `sort_by_time` returns tasks in ascending `HH:MM` order; unscheduled tasks sort last; empty input is safe; no tasks are dropped. |
+| **Recurrence Logic** | 5 tests | Completing a `daily` task creates a successor due the next day; `weekly` tasks reappear in 7 days; `as-needed` tasks return `None`; the new task is immediately visible in `get_pending_tasks()`; the original is marked completed. |
+| **Conflict Detection** | 5 tests | Two tasks sharing the same date and time are flagged; different times on the same day are not; same time on different dates is not; tasks with no `start_time` are skipped; empty schedule returns no warnings. |
+| **Edge Cases** | 5 tests | Pet with no tasks returns empty list; owner with no pets returns empty list; adding a duplicate task raises `ValueError`; `is_high_priority()` correctness; completing a nonexistent title returns `None` silently. |
+
+**Total: 21 tests — all passing.**
+
+### Confidence Level
+
+★★★★☆ (4 / 5)
+
+The scheduler's core behaviors (sorting, recurrence, conflict detection, and duplicate-guard) are thoroughly exercised and all pass. The one star held back reflects known limitations not yet tested: duration-overlap conflicts (two tasks whose windows overlap but don't share an exact start time), the `generate_plan` greedy budget logic, and multi-pet load-balancing warnings.
+
+---
+
 ## Getting started
 
 ### Setup
