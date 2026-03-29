@@ -22,6 +22,35 @@ Your final app should:
 - Display the plan clearly (and ideally explain the reasoning)
 - Include tests for the most important scheduling behaviors
 
+## Smarter Scheduling
+
+Four algorithmic improvements were added to make the scheduler more useful for
+real pet-care routines:
+
+**Sorting by time** — `Scheduler.sort_by_time(tasks)` orders any task list
+chronologically using each task's `start_time` field (`"HH:MM"` format). Tasks
+with no assigned time are placed at the end. Because zero-padded hour strings
+sort identically to numeric comparison, no datetime conversion is needed.
+
+**Filtering by pet or status** — `Scheduler.filter_tasks(tasks, pet_name=..., completed=...)`
+lets you narrow any task list to a single pet, to only pending tasks, only
+completed tasks, or any combination. Both parameters are optional keyword-only
+arguments so callers only specify what they need.
+
+**Recurring task auto-creation** — When `Pet.mark_task_complete(title)` is
+called, it automatically queues the next occurrence for recurring tasks using
+Python's `timedelta`: daily tasks reappear the next day, weekly tasks reappear
+seven days later. One-off ("as-needed") tasks are simply completed with no
+follow-up. No manual re-entry is required.
+
+**Conflict detection** — `Scheduler.detect_conflicts(tasks)` scans the task list
+and returns a plain list of warning strings for any two tasks that share the same
+date and start time. It never raises an exception — callers decide how to display
+or act on the warnings. The method uses exact time-slot matching (not duration
+overlap); see `reflection.md §2b` for the reasoning behind that tradeoff.
+
+---
+
 ## Getting started
 
 ### Setup

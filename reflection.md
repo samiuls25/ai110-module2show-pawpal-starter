@@ -90,8 +90,32 @@ After reviewing the class skeleton, three problems surfaced that required change
 
 **b. Tradeoffs**
 
-- Describe one tradeoff your scheduler makes.
-- Why is that tradeoff reasonable for this scenario?
+**Tradeoff: Exact time-slot matching vs. duration-overlap detection**
+
+The `detect_conflicts()` method flags a conflict only when two tasks share the
+*exact same `start_time` string* (e.g., both are `"09:00"`). It does **not**
+check whether two tasks' time windows overlap — for example, a 30-minute task
+starting at `08:45` and a 60-minute task starting at `09:00` would run
+concurrently from `09:00` to `09:15`, but the scheduler would not warn about it.
+
+*Why this tradeoff is reasonable here:*
+
+Duration-overlap detection requires converting `"HH:MM"` strings to `datetime`
+objects, computing each task's end time (`start + duration`), and then comparing
+every pair of tasks to check for intersection. For a small daily task list (5–15
+tasks), the added complexity is rarely worth the benefit: most pet care tasks
+(feeding, medication, a walk) are discrete activities that don't actually run in
+parallel. The exact-match check catches the most common real-world mistake —
+accidentally assigning two tasks to the same fixed slot — without adding code
+that would be harder to maintain and explain.
+
+*When this tradeoff would stop being reasonable:*
+
+If the app were extended to support a shared household calendar (multiple owners,
+vet appointments, dog-walker slots), duration-aware overlap detection would become
+necessary. At that point, converting `start_time` to a `datetime` and storing
+`end_time = start_time + timedelta(minutes=duration_minutes)` would be the right
+next step.
 
 ---
 
